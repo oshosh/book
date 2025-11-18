@@ -180,3 +180,55 @@ function React168() {
     return /*#__PURE__*/React.createElement("h1", null, /*#__PURE__*/React.createElement("div", null, "hi"));
   }
   ```
+
+### 10.1.4 그 밖의 주요 변경 사항
+  - 이벤트 폴링 제거
+    - 리액트는 이벤트 처리를 위해 `SyntheticEvent`를 통해 브라우저의 기본 이벤트가 아니라 한번 더 래핑한 이벤트를 사용하는데 이벤트 발생 시 이벤트를 새로 만들어야하고 메모리 할당 작업이 일어나 메모리 누수를 방지 하기 위해서 주기적으로 해제를 하게 되는데 이러한 작업을 16버전에서는 이벤트 폴링을 발생 시켰다.
+  - 이벤트 폴링 시스템
+    1. 이벤트 핸들러가 이벤트를 발생
+    2. 합성 이벤트 풀에서 합성 이벤트 객체에 대한 참조를 가져옴
+    3. 이벤트 정보를 합성 이벤트 객체에 넣는다.
+    4. 지정된 이벤트 리스너 실행
+    5. 이벤트 객체가 초기화 되고 다시 이벤트 풀로 돌아감.
+  - 이벤트 폴링 시스템의 단점
+    - 이벤트 폴링 시스템은 어떻게 보면 합리적인 것 처럼 보인다. 예를 들어 16버전 이하의 코드를 살펴보자.
+    - 코드
+      - 아래와 같은 문제가 발생 하는 이유는 서로 다른 이벤트 간에 이벤트 객체를 재사용하고 그 사이에 모든 이벤트 필드를 null로 변경한다. 즉, 이벤트 핸들러 호출 시 `SyntheticEvent`(합성 이벤트) 이후 재사용을 위해 null로 초기화 된다. 그렇기 때문에 e로 접근 시 초기화 되어 아래와 같은 문제가 발생한다.
+
+    ```
+    function handleChange(e) {
+      // This won't work because the event object gets reused.
+      setTimeout(() => {
+        console.log(e.target.value); // Too late!
+      }, 100);
+    }
+
+    function handleChange(e) {
+      // Prevents React from resetting its properties:
+      e.persist();
+
+      setTimeout(() => {
+        console.log(e.target.value); // Works
+      }, 100);
+    }
+    ```
+  - `useEffect` 클린업 함수의 비동기 실행
+    - 16버전에서는 클린업 시에 동기적 처리에서 비동기로 변경되었다.
+      1. 렌더(update) 이후
+      2. 커밋 단계(commit) 직전/직후에 클린업이 동기 실행됨
+        - 여기서 시간이 길어질 수 있음..........
+      3. 화면 paint 
+    - 17 버전에서 변화
+      1. 렌더(update) 이후
+      2. 커밋 단계(commit)에서 DOM 변경 후 바로 화면 paint
+      4. 비동기 클린업 실행
+  - 컴포넌트 `undefined` 반환에 대한 일관적인 처리
+    - React 16 / 17
+      - 컴포넌트가 `undefined`를 반환하면 dev 모드에서 에러를 던진다.
+        - 메시지: "Nothing was returned from render. This usually means a return statement is missing..."
+      - (책에서 말하는 것처럼) forwardRef/memo 같은 일부 케이스는
+        버전에 따라 에러를 제대로 못 잡던 버그가 있었다고 설명하는 자료도 있음.
+        하지만 "정상 스펙" 기준으론 `undefined` = 에러.
+    - React 18
+      - 컴포넌트가 `undefined`를 반환해도 에러/경고를 **더 이상 내지 않는다.**
+      - 그냥 "아무것도 렌더링하지 않음"으로 취급한다.
