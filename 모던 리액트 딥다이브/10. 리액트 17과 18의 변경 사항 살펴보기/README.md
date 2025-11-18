@@ -232,3 +232,74 @@ function React168() {
     - React 18
       - 컴포넌트가 `undefined`를 반환해도 에러/경고를 **더 이상 내지 않는다.**
       - 그냥 "아무것도 렌더링하지 않음"으로 취급한다.
+
+## 10.2 리액트 18버전 살펴보기
+  - 가장 큰 변경점은 동시성 지원이다.
+    - 해당 내용은 2장에서 정리를 했었음.
+    - 16버전에서 `Stack Reconciler`에 대한 문제점으로 인하여 렌더링(재귀 호출) 발생 시 중단이 불가능한 문제로 무조건 동기 방식으로 작동하였다.
+    - 16.8 버전 부터 fiber 아키텍처가 나오게 되었고 그 가반으로 렌더링 흐름을 직접 제어가 가능하도록 17 버전에서 준비기간을 가지고 나온것으로 보임.
+  - `useId`
+    - 유니크한 값을 생성하는 새로운 훅
+  - `useTransition`
+    - 무거운 렌더링 작업을 조금 미룰 수 있어 좋은 사용자 경험을 제공
+  - `useDeferredValue`
+    - 리렌더링이 급하지 않은 부분을 지연할 수 있게 도와주는 훅
+  - `useSyncExternalStore`
+    - 테어링(tearing)현상을 방지하기 위해 나타난 훅 렌더링을 일시 중지하거나 뒤로 미루는 등의 최적화가 가능해지면서 동시성 이슈가 발생
+
+### 10.2.2 react-dom/client
+  - `createRoot`
+    ```
+    // 18v 이전의 루트
+    ReactDOM.render(, document.getElementById('root'));
+
+    // 18v 이후의 루트 API
+    import * as ReactDOMClient from ‘react-dom/client’;
+    const container = document.getElementById('‘app');
+    const root = ReactDOMClient.createRoot(container);
+    root.render();
+    ```
+
+### 10.2.4 자동 배치
+  - 리액트가 여러 상태 업데이트를 한번의 리렌더링으로 묶어서 업데이트를 한다.
+  - 17 이하 버전에서도 이벤트 핸들러 내부에 자동 배치가 되나 비동기 이벤트에서는 자동 배치가 이뤄지지 않았다.
+  ```
+  const [count, setCount] = useState(0);
+  function increase() {
+    setCount(count + 1);
+    setCount(count + 1);
+    setCount(count + 1);
+    // count: 1
+  }
+
+  // prev 사용
+  function another() {
+    setCount((prev) => prev + 1);
+    setCount((prev) => prev + 1);
+    setCount((prev) => prev + 1);
+    // count: 3
+  }
+
+  import { flushSync } from "react-dom";
+  // ReactDOM.flushSync() 사용
+  function flush() {
+    flushSync(() => {
+        setCount(count + 1);
+    });
+    flushSync(() => {
+        setCount(count + 1);
+    });
+    flushSync(() => {
+        setCount(count + 1);
+    });
+    // count: 3
+  }
+  ```
+
+### 10.2.6 Suspense 기능 강화
+  - 16.6 버전에서 도입된 기능으로, 동적 컴포넌트를 가져오는데 있어 초기 렌더링 속도 향상 및 지연 로딩을 통해 많은 기능을 하고 있다.
+  - 18 버전 이하에서는 useEffect에서 Suspense 컴포넌트가 보이기도 전에 실행 되는 문제가 있다. 그렇기 때문에 next.js에서는 client 컴포넌트로 랩핑을 해야하는 부분이 존재 했는데 현재는 해결이 되었다.
+  - 현 18버전에서는 React.lazy 및 promise와 같은 비동기 처리에 대해 자연스러운 지원이 가능하다.
+  - Suspense가 로딩 중인 경우 effect가 실행되지 않고 Hydration 중에도 Suspense fallback이 제대로 동작한다.
+    - `use` 나 `await`를 붙혀 서버 컴포넌트에서 Promise를 “기다리지 않고” 바로 throw 하여 fallback 표시를 하도록 동작이 되고 데이터가 반영이 되면서 resolve 되며 UI가 교체가 됩니다.
+
