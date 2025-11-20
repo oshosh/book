@@ -84,3 +84,86 @@
   - 서버가 렌더링 요청을 받는다. 서버가 렌더링 과정을 수행해야 하므로 서버에서 시작된다.
   - 서버에서 받은 요청에 따라 컴포넌트를 JSON으로 직렬화 한다. 이때 서버에서 렌더링할 수 있는 것은 직렬화해서 내보내고, 클라이언트로 표시된 부분은 해당 공간을 플레이스홀더 형식으로 비워두고 나타낸다. 브라우저는 이를 역질렬화해서 렌더링을 수행한다.
   - 브라우저가 리액트 컴포넌트 트리를 구성한다. 브라우저가 서버로 스트리밍으로 JSON 결과물을 받았다면 이 구문을 다시 파싱한 결과물을 바탕으로 트리를 재구성해 컴포넌트를 만들어 나간다.
+
+## 11.3 Next.js에서의 리액트 서버 컴포넌트
+### 11.3.1 새로운 fetch 도입과 getServerSideProps, getStaticProps, getInitialProps의 삭제
+  - 13 버전 이후로는 `fetch` 기반으로 요청하도록 변경
+  - 서버 컴포넌트 트리내에 동일한 요청이 있다면 재요청이 발생하지 않도록 요청 중복을 방지
+
+### 11.3.2 정적 렌더링과 동적 렌더링
+  - 13 버전에서는 정적 라우팅에 대해 기본적으로 빌드 타임에 렌더링을 미리하고 캐싱해 재사용할 수 있게 되었음.
+  - 동적 라우팅은 서버에 매번 요청 올때 컴포넌트를 렌더링하도록 변경
+  - 동적인 렌더링을 원할 경우 { cache: 'no-cache' } 옵션을 추가해서 요청이 올때 마다 렌더링을 수행하게 하면되고, 정적일 경우엔 제거하면 된다.
+    ```
+    async function getData() {
+      // 
+      const res = await fetch("https://api.example.com/...", { cache: "no-cache" });
+      // The return value is *not* serialized
+      // You can return Date, Map, Set, etc.
+
+      if (!res.ok) {
+        // This will activate the closest `error.js` Error Boundary
+        throw new Error("Failed to fetch data");
+      }
+
+      return res.json();
+    }
+
+    export default async function Page() {
+      const data = await getData();
+
+      return <main></main>;
+    }
+    ```
+  - `generateStaticParams`: 동적인 주소이지만 특정 주소에 대해서만 캐싱하고 싶을 경우
+    - https://nextjs.org/docs/app/api-reference/functions/generate-static-params
+
+### 11.3.3 캐시와 mutating, 그리고 revalidating
+  - 페이지에 `revalidate`라는 변수를 선언해서 페이지 레벨로 정의하는 것도 가능
+    - 최초로 해당 라우트 요청이 올 때는 미리 정적으로 캐시해 둔 데이터를 보여준다.
+    - 이 캐시된 초기 요청은 `revalidate`에 선언된 값만큼 유지된다.
+    - 만약 해당 시간이 지나도 일단은 캐시된 데이터를 보여준다.
+    - `Next.js`는 캐시된 데이터를 보여주는 한편, 시간이 경과했으므로 백그라운드에서 다시 데이터를 불러온다.
+    - 작업이 성공적으로 끝나면 캐시된 데이터를 갱신하고, 그렇지 않다면 과거 데이터를 보여준다.
+
+### 11.3.4 스트리밍을 활용한 점진적인 페이지 불러오기
+  - 과거 서버 사이드 렌더링 요청
+    - 페이지를 모두 렌더링 해서 내려줄때 까지 사용자에게 보여줄 수 있는게 없음
+    - 페이지를 전달 받아도 사용자는 인터랙션이 불가한 정적 페이지
+    - 리액트에서 하이드레이션을 거쳐 사용자가 사용할 수 있는 페이지가 됨
+  - RSC의 경우
+    - 하나의 페이지를 다 완성될때 까지 기다리지 않고 HTML을 작은 단위로 쪼개서 클라이언트로 점진적으로 보내는 방식이 도입됨
+    - 최초 바이트까지의 시간(TTFB)과 최초 콘텐츠풀 페인팅(FCP) 개선에 도움이 됨
+
+## 11.5 서버 액션
+  - 매커니즘
+    - form의 action
+      - 서버 액션은 클라이언트에서 직접 실행되지 않고 서버로 Action_id를 form으로 전송
+      - 서버 액션은 번들에 포함되지 않고 서버에서만 실행 할 수 있도록 프론트 JS 네트워크를 통해 함수 소스가 아니라 함수 ID만 전달함
+      - 서버 액션은 빌드 결과물이 클라이언트에 노출되지 않는다. 즉, 빌드 시점에 `use server`를 보고 빌드 시 자동으로 클라이언트로부터 분리가 됨
+      - 서버 액션을 사용하면 요청이 서버 측에서 직접 실행
+  - `startTransition`과의 연동
+    - client 컴포넌트에서 서버 액션 호출 시에도 중복 호출을 막을 수 있는 장점이 있음
+      - 예전 클라이언트 컴포넌트에서 굳이 쓰로틀링을 할 필요가 없어짐
+    ```
+    "use server"
+    export async function updateData({
+      id: string,
+      data: {name: string, age: number}
+    }) { 
+      ...
+      revalidatePath(`/server-action/form/${id}`)  
+    }
+
+    "use client"
+    const [isPending, startTransition] = useTransition()
+
+    const handleClick = () => {
+      // 서버 액션 동작
+      startTransition(() => updateData(id, { name: '기본값', age: 0 }))
+    }
+
+    return isPending ? <SkeletonBtn /> : (
+      <button onClick={handleClick}>기본값으로 돌리기</button>
+    )
+    ```
