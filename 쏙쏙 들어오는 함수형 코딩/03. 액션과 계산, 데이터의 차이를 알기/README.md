@@ -105,3 +105,36 @@
     }
   }
   ```
+
+# 이미 있는 코드에 함수형 사고 적용하기
+  - 아래 코드는 액션에 액션을 타고 올라가는 코드이다.
+    - 가능한 액션은 적게 사용
+    - 가능한 작게 만든다.
+    - 외부 세계와 상호작용하는 것을 제한
+    - 호출 시점에 의존하는 것을 제한
+```
+type Affiliate = {
+	sales: number;
+	commission: number;
+	bank_code: string;
+}
+function figurePayout(affiliate: Affiliate) {
+	const owed = affiliate.sales * affiliate.commission;
+	if (owed > 100) {
+	// 하나의 액션이 있다고 생각할 수 있다.
+	 sendPayout(affiliate.bank_code, owed);
+	}
+}
+
+// 액션에서 액션을 호출 ...
+function affiliatePayout(affiliates: Array<Affiliate>) {
+	affiliates.forEach((affiliate) => {
+		figurePayout(affiliate);
+	})
+ }
+ 
+// 액션 호출...
+function main(affiliates: Array<Affiliate>) {
+	affiliatePayout(affiliates);
+}
+```
